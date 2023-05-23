@@ -29,7 +29,18 @@ static async Task HttpClientSSLCheck(string domain)
     }
     catch (Exception e)
     {
-        HandleException(domain, e);
+        if (e.InnerException is CertPolicyException)
+        {
+            Console.WriteLine($"{domain} | ex = {e.InnerException.Message}");
+        }
+        else if (e.InnerException is NeedRenewException)
+        {
+            Console.WriteLine($"{domain} | need to renew !!");
+        }
+        else
+        {
+            Console.WriteLine($"{domain} | ex = {e.Message}");
+        }
     }
 }
 
@@ -43,7 +54,7 @@ static async Task TcpClientSSLCheck(string domain)
 
         using var stream = tcpClient.GetStream();
         using SslStream ssl = new(stream, false, ValidateCertificate);
-        ssl.AuthenticateAsClient(domain);
+        await ssl.AuthenticateAsClientAsync(domain);
 
         Console.WriteLine($"{domain} is OK {nameof(TcpClientSSLCheck)}");
     }
@@ -66,7 +77,7 @@ static async Task SocketSSLCheck(string domain)
         await socket.ConnectAsync(domain, 443, cts.Token);
 
         using SslStream ssl = new (new NetworkStream(socket, false), false, ValidateCertificate);
-        ssl.AuthenticateAsClient(domain);
+        await ssl.AuthenticateAsClientAsync(domain);
 
         Console.WriteLine($"{domain} is OK {nameof(SocketSSLCheck)}");
     }
@@ -101,11 +112,11 @@ static bool ValidateCertificate(object sender, X509Certificate? certificate, X50
 
 static void HandleException(string domain, Exception e)
 {
-    if (e.InnerException is CertPolicyException)
+    if (e is CertPolicyException)
     {
-        Console.WriteLine($"{domain} | ex = {e.InnerException.Message}");
+        Console.WriteLine($"{domain} | ex = {e.Message}");
     }
-    else if (e.InnerException is NeedRenewException)
+    else if (e is NeedRenewException)
     {
         Console.WriteLine($"{domain} | need to renew !!");
     }
