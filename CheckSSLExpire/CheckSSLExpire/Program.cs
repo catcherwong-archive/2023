@@ -11,7 +11,8 @@ static async Task HttpClientSSLCheck(string domain)
 {
     HttpClientHandler clientHandler = new()
     {
-        ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => ValidateCertificate(sender, cert, chain, sslPolicyErrors)
+        ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) 
+                => ValidateCertificate(sender, cert, chain, sslPolicyErrors)
     };
 
     try
@@ -20,7 +21,7 @@ static async Task HttpClientSSLCheck(string domain)
         using HttpClient client = new(clientHandler);
         await client.GetAsync($"https://{domain}", cts.Token);
 
-        Console.WriteLine($"DONE {nameof(HttpClientSSLCheck)}");
+        Console.WriteLine($"{domain} is OK {nameof(HttpClientSSLCheck)}");
     }
     catch (TaskCanceledException)
     {
@@ -28,7 +29,7 @@ static async Task HttpClientSSLCheck(string domain)
     }
     catch (Exception e)
     {
-        Console.WriteLine(e.Message);
+        HandleException(domain, e);
     }
 }
 
@@ -44,7 +45,7 @@ static async Task TcpClientSSLCheck(string domain)
         using SslStream ssl = new(stream, false, ValidateCertificate);
         ssl.AuthenticateAsClient(domain);
 
-        Console.WriteLine($"DONE {nameof(TcpClientSSLCheck)}");
+        Console.WriteLine($"{domain} is OK {nameof(TcpClientSSLCheck)}");
     }
     catch (TaskCanceledException)
     {
@@ -52,7 +53,7 @@ static async Task TcpClientSSLCheck(string domain)
     }
     catch (Exception e)
     {
-        Console.WriteLine(e.Message);
+        HandleException(domain, e);
     }
 }
 
@@ -67,7 +68,7 @@ static async Task SocketSSLCheck(string domain)
         using SslStream ssl = new (new NetworkStream(socket, false), false, ValidateCertificate);
         ssl.AuthenticateAsClient(domain);
 
-        Console.WriteLine($"DONE {nameof(SocketSSLCheck)}");
+        Console.WriteLine($"{domain} is OK {nameof(SocketSSLCheck)}");
     }
     catch (TaskCanceledException)
     {
@@ -75,10 +76,9 @@ static async Task SocketSSLCheck(string domain)
     }
     catch (Exception e)
     {
-        Console.WriteLine(e.Message);
+        HandleException(domain, e);
     }
 }
-
 
 static bool ValidateCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
 {
@@ -87,7 +87,7 @@ static bool ValidateCertificate(object sender, X509Certificate? certificate, X50
     var expirationDate = DateTime.Parse(certificate.GetExpirationDateString(), CultureInfo.InvariantCulture);
     if (expirationDate - DateTime.Today < TimeSpan.FromDays(30))
     {
-        throw new Exception("It's time to renew the certificate!");
+        throw new NeedRenewException("It's time to renew the certificate!");
     }
     if (sslPolicyErrors == SslPolicyErrors.None)
     {
@@ -95,6 +95,36 @@ static bool ValidateCertificate(object sender, X509Certificate? certificate, X50
     }
     else
     {
-        throw new Exception($"Cert policy errors: {sslPolicyErrors.ToString()}");
+        throw new CertPolicyException($"Cert policy errors: {sslPolicyErrors.ToString()}");
+    }
+}
+
+static void HandleException(string domain, Exception e)
+{
+    if (e.InnerException is CertPolicyException)
+    {
+        Console.WriteLine($"{domain} | ex = {e.InnerException.Message}");
+    }
+    else if (e.InnerException is NeedRenewException)
+    {
+        Console.WriteLine($"{domain} | need to renew !!");
+    }
+    else
+    {
+        Console.WriteLine($"{domain} | ex = {e.Message}");
+    }
+}
+
+public class NeedRenewException : Exception
+{
+    public NeedRenewException(string msg) : base(msg)
+    {
+    }
+}
+
+public class CertPolicyException : Exception
+{
+    public CertPolicyException(string msg) : base(msg)
+    {
     }
 }
